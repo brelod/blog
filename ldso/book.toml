@@ -1,0 +1,9 @@
+[book]
+src = "src"
+title = "Dynamic linker"
+authors = ["Daniel Bognar"]
+language = "en"
+multilingual = false
+
+[build]
+build-dir = "html"
