@@ -1,6 +1,6 @@
 # Implementing standard streams
 
-In this chapter we're going to continue builind the Linux standard library by going through the following steps:
+In this chapter we're going to continue building the Linux standard library by going through the following steps:
 
 1. Syscalls in general
 2. Implement read and write syscalls
@@ -11,26 +11,26 @@ In this chapter we're going to continue builind the Linux standard library by go
 
 
 ## Syscalls in general
-In chapter one we already implemented a systemcall called `exit`. We didn't talk much about how it works. Since systemcalls
+In chapter one we already implemented a systemcall called `exit`. We didn't talk much about how it works though. Since syscalls
 are the foundation of the communication between the user and kernel space we will implement a couple of them throughout the
-following chapters. As result it's important to get a basic understanding how they work.
+following chapters. So it's important to get a basic understanding how they work.
 
-Systemcalls work quite similar to function calls in the sinn that a couple of registers will be upated with some data, the
+Syscalls work quite similar to function calls in the sinn that a couple of registers will be upated with some data and the
 execution of the current code will be interrupted to call another code section. This other code will use the values of the
 registers, do some operation with them and wenn it finishes the execution returns back to the original point to the caller
-function can continue with the result of the call. An important difference though is that by calling the syscall a contex
+function so it can continue with the result of the call. An important difference though is that by calling the syscall a contex
 switch will occur. This means that instead of simply jumping to another code segment of the same executable the process
-will be interrupted the CPU will switch to kernel mode and the code of the kernel continue to execute. The same happens at
+will be interrupted, the CPU will switch to kernel mode and the code of the kernel continues to execute. The same happens at
 the end of the systemcall: the CPU switches back to user-mode and continues to execute the user-space code. To tell the CPU
 to make contex switches there are two instructions on x86 family called [syscall](https://www.felixcloutier.com/x86/syscall) 
 and [sysret](https://www.felixcloutier.com/x86/sysret). The first is used by user-space codes to switch to kernel 
 and the second is used by the kernel to switch back to user-mode.
 
-There are many systemcalls defined by the Linux kernel. The id of these systemcalls can be found in the kernes source tree.
+There are many syscalls defined by the Linux kernel. The id of these syscalls can be found in the kernel source tree.
 The 64 bit version of the x86 architecture can be found for example [here](https://github.com/torvalds/linux/blob/v6.9/arch/x86/entry/syscalls/syscall_64.tbl)
 
-If you have already done some lower level programming (for example C/C++) you most likely already know some of these calls.
-The standard C library warps these systemcalls into simple functions so you can call them in youre code without even 
+If you have done some lower level programming (for example C/C++) you most likely already know some of these calls.
+The standard C library wraps these syscalls into simple functions so you can call them in your code without even 
 realizing that a contex switch is needed. Some famous examples are the following:
 
 - read
@@ -44,15 +44,15 @@ realizing that a contex switch is needed. Some famous examples are the following
 
 Since we don't use the standard C library we need to implement these wrappers in rust to be able to use them in our binaries.
 
-To be able to pass arguments to the kernel we need to specific registers. The question is which register should we use?
-The references which describe how a binary code needs to be implemented / interpeted called Application Binary Interface (ABI).
+To be able to pass arguments to the kernel we need to use some specific registers. The question is which register should we use?
+The documentation which describe how a binary code needs to be implemented / interpeted called Application Binary Interface (ABI).
 Linux uses the [System V ABI specification](https://refspecs.linuxbase.org/elf/x86_64-abi-0.99.pdf). There are many interesting
 stuff to read about in this PDF but the most important part now for us are the calling conventions. It turns out the the function
 calling convention of the C language and the syscall interface are not the same. While the function arguments are passed in the
 `rdi`, `rsi`, `rdx`, `rcx`, `r8`, `r9` registers the syscall interface uses the `rdi`, `rsi`, `rdx`, `r10`, `r8` and `r9` 
 registers. Appart from that it's important that the `rax` register is used to pass the syscall id and to retrieve the result 
 of the syscall. To conform to these requirements we can [implement a macro](https://doc.rust-lang.org/reference/macros.html) 
-to provide a simple way of starting a syscall.  Let's create a file called `syscalls.rs` and add a `pub mod syscalls` to the `linux.rs` file.
+to provide a simple way of starting a syscall.  Let's create a file called `syscall.rs` and add a `pub mod syscall` to the `linux.rs` file.
 ```rust
 macro_rules! syscall {
     ($rax:expr) => {{
@@ -145,7 +145,7 @@ to the kernel. Note that the `asm` macro of the rust core library requires the p
 assembly code it self even though they will be set before the execution.
 
 ## Read, write, exit
-The simplest way to lookup how the standard C library has implemented a systemcall wrapper is to check out the manual page of the it.
+The simplest way to lookup the C implementation of a syscall wrapper is to check out the manual page of the it.
 For example: 
 [man read.2](https://man7.org/linux/man-pages/man2/read.2.html),
 [man write.2](https://man7.org/linux/man-pages/man2/write.2.html),
@@ -157,7 +157,7 @@ ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);
 void exit(int rc);
 ```
-Let's update our `syscalls.rs` file with the following functions:
+Let's update our `syscall.rs` file with the following functions:
 
 ```rust
 const SYS_READ: isize = 0;
@@ -181,7 +181,7 @@ pub fn exit(rc: u8) -> ! {
 This allows us to read some user input and write it to the stdout as follows:
 ```rust
 #[no_mangle]
-fn main() { 
+fn main() -> u8 { 
     let mut buf = [0u8;1024];
     let ptr = &mut buf as *mut u8;
     linux::syscall::read(0, ptr, buf.len());
@@ -198,7 +198,7 @@ error: linking with `cc` failed: exit status: 1
 ```
 It turns out that to be able to use the rust syntax `let buf = [0u8;1024]` the core library needs the memset symbole. This
 makes sense since this expression fills up a memory region with 1024 zeros.
-There are a couple symboles the core library needs to be able to work. These are typically provided by the standard C library but
+There are a couple symboles the core library expects. These are typically provided by the standard C library but
 since we have disabled any libraries apart from the core lib we have to implement them manually. 
 The [documentation](https://doc.rust-lang.org/core/) says the expected symboles are:
 
@@ -231,14 +231,19 @@ hello world
 ```
 
 ## Safe syscalls
-Wenn we write unsafe code we sign a contract with the compiler that our code is never going to be unsound. In the Rust world
-a codeblock is known to sound if it can **never** cause undefined behaviour. Luckily it's quiet well defined
-what "undefined" means. There a [list of actions](https://doc.rust-lang.org/reference/behavior-considered-undefined.html) which 
-causes undefined behavior and if we can be sure you are not hitting any of the items of list our code in said to be sound.
-Even if this list is quite straitforward it's easy to miss some small detail just like we did in the previous paragraphs.
-Our code look good, right? It has basically the same signature like the C functions and it passes all the arguments to the kernel.
-It doesn't do something like dereferencing raw pointers, it doesn't do array indexing, doesn't free up memory, so what could 
-go wrong then? Well let's rewrite the `main` function and see what happens.
+Wenn we write unsafe code we sign a contract with the compiler that our code is
+never going to be unsound. In the Rust world a codeblock is known to be sound
+if it can never cause undefined behaviour. Luckily it's quiet well defined what
+"undefined" means. There a [list of
+actions](https://doc.rust-lang.org/reference/behavior-considered-undefined.html)
+which causes undefined behavior and if we can be sure that we're not
+hitting any of these, then our code will be sound. Even if this list is
+quite straitforward it's easy to miss some small details just like we did
+in the previous paragraphs. Our code looks good, right? It has basically
+the same signature like the C functions and it passes all the arguments to
+the kernel. It doesn't do something like dereferencing raw pointers, it
+doesn't do array indexing, doesn't free up memory, so what could go wrong
+then? Well let's rewrite the `main` function and see what happens.
 ```rust
 #[no_mangle]
 fn main() -> u8 { 
@@ -246,25 +251,31 @@ fn main() -> u8 {
     0
 }
 ```
-If we run this code we just experience undefined behaviour: We pass the kernel a one byte length array and a length paramter 1024.
-As a result it tries to write 1024 bytes after the position of our byte array and it is absolutelly not defined what will
-happen in such a scenario. In our case since the byte array was in the read only section of the binary it picks up the bytes
-from there.
+If we run this code we just experience undefined behaviour: We pass the kernel
+a one byte length array and a length paramter 1024.  As a result it tries to
+write 1024 bytes after the position of our byte array and it is absolutelly not
+defined what will happen in such a scenario. In our case since the byte array
+was in the read only section of the binary it picks up the bytes from there.
 ```
 ./target/bin
 xinternal error: entered unreachable codesyscall.rsHhzRx
 A                                                          C
 UAC
 ```
-The conclusion is that Rust is only safe if every part of the code is known to be sound. Our code is not sound because the
-safe rust code can pass such parameters to it which causes undefined behaviour. Let's fix that by utilizing a primitive
-type in the Rust core library called [`slice`](https://doc.rust-lang.org/core/primitive.slice.html). Since the slice
-bundles the buffer and its length a user of our code can not pass a length paramter which is bigger than the size of the slice.
-To be more precise it can pass to our function a slice which is has an invalid length parameter but to create this slice
-one need to use an other unsafe block and the auther of this unsafe block has signed the same contract with the compiler, that
-it can never produce undefined behaviour. So you see the point. If all the unsafe blocks are sound then the whole language is
-safe. But if any of these block is unsound the whole ecosystem is corrupted. So let's be causios with unsafe blocks.
-Here is a fix for our syscalls:
+The conclusion is that Rust is only safe if every part of the code is known to
+be sound. Our code is not sound because the safe rust code can pass such
+parameters to it which causes undefined behaviour. Let's fix that by utilizing
+a primitive type in the Rust core library called
+[`slice`](https://doc.rust-lang.org/core/primitive.slice.html). Since the slice
+bundles the buffer and its length a user of our code can not pass a length
+paramter which is bigger than the size of the slice. To be more precise it can
+pass to our function a slice which has an invalid length parameter but to
+create this slice one need to use an other unsafe block and the author of this
+unsafe block has signed the same contract with the compiler, that it can never
+produce undefined behaviour. So you see the point. If all the unsafe blocks are
+sound then the whole language is safe. But if any of these block is unsound the
+whole ecosystem is corrupted. So let's be cautious with unsafe blocks. Here is
+a fix for our syscalls:
 ```rust
 pub fn read(fd: u32, buf: &mut [u8]) -> isize {
     unsafe { syscall!(SYS_READ, fd, buf.as_ptr(), buf.len()) }
@@ -282,7 +293,8 @@ fn main() -> u8 {
     0
 }
 ```
-Since there is no way to missuse this syscall if you run it, it will write exaclty one character to the screen:
+Since there is no way to missuse this syscall, if you run it, it will write
+exaclty one character to the screen:
 ```
 > ./cargo.sh run
 x
@@ -290,8 +302,8 @@ x
 
 ## Idiomatic syscall
 Although our code is now safe it is still not really idiomatic. In C programming it's normal to
-return with a number wich represents the result of the function. For example all of our syscalls return with a negativ
-integer in case of an error. But in rust we have a nicer way to handle error which is based on the 
+return a number wich represents the result of the function. For example all of our syscalls return with a negativ
+integer in case of an error. But in rust we have a nicer way to handle errors and it is based on the 
 [`Result`](https://doc.rust-lang.org/core/result/enum.Result.html) enum. Let's create an `Error` enum and a `Result` enum
 to represent the result of our syscalls. The list of the error codes that a syscall may return can be found 
 in [errno-base.h](https://github.com/torvalds/linux/blob/master/include/uapi/asm-generic/errno-base.h) and
@@ -917,7 +929,7 @@ with a descriptor 3 we should see an error now. Let's recompile and run
 > ./cargo.sh run
 ```
 our program starts hammering on the CPU and never exists. Sounds familiar? The `write` syscall returns and error, we unwrap it
-and as a result our code panics, But we implemented our panic handler in the first chapter like this:
+and as a result our code panics. But we implemented our panic handler in the first chapter like this:
 ```rust
 #[panic_handler]
 fn panic_handler(_: &core::panic::PanicInfo) -> ! {
@@ -940,7 +952,7 @@ Now if we run the same code with file descriptor 3 the process should simply exi
 ## Standard IO
 We already implemented `Display` and `Debug` for our error type so why don't we simply print them on the stderr?
 The [`PanicInfo`](https://doc.rust-lang.org/core/panic/struct.PanicInfo.html) also implements these traits, so we should be
-able to write them out, but how should we creata a string or more preciselly a bytearray from these types?
+able to write them out, but how should we create a string or more preciselly a bytearray from these types?
 There is a nice macro in the core library called [`write!`](https://doc.rust-lang.org/core/macro.write.html) 
 which could be used to format the output. Let's try that in the panic_handler function.
 ```rust
@@ -950,7 +962,7 @@ fn panic_handler(info: &core::panic::PanicInfo) -> ! {
     syscall::exit(255);
 }
 ```
-As you probably have expect, we get a compilation error:
+As you probably have expected, we get a compilation error:
 ```
 ./cargo.sh build
 error[E0599]: cannot write into `u8`
@@ -1030,7 +1042,7 @@ fn panic_handler(info: &core::panic::PanicInfo) -> ! {
 }
 ```
 But if we try to build the code we get yet another linker error about the missing `memcpy` function. No problem. We already
-expected that just didn't know when it is going to come. So let's put our `memcpy` implementation next to the `memset` in the
+expected that, just didn't know when it is going to come. So let's put our `memcpy` implementation next to the `memset` in the
 `ffi.rs` file:
 ```rust
 #[no_mangle]
@@ -1056,8 +1068,8 @@ fn rust_eh_personality() {}
 ```
 
 ## Print macros
-The write macro is already a big improvement but we can go further. Let's define two macros to print a text onto the
-stdout and stderr. The can be defined in the io.rs file.
+The write macro is already a big improvement but we can go further. Let's define some macros to print a text onto the
+stdout and stderr. They can be defined in the io.rs file.
 ```rust
 #[macro_export]
 macro_rules! print {

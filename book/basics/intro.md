@@ -6,14 +6,14 @@ we're going through the following steps:
 1. Create initial project
 2. Disable the Rust standard library
 3. Disable standard startup logic
-4. Implement startup logic
-5. Implement teardown logic
-6. Implement the standard library
+4. Implement simplified startup logic
+5. Implement simplified teardown logic
+6. Implement a basic standard library
 
 
 ## Initialize a project
-Since we only support the linux platform let's call our new library `linux` as it will be an interface to the linux kernel.
-To get a deeper understanding how the Rust ecosystem works we won't use cargo at this but write out all the commands which 
+Since we only support the Linux platform let's call our new library `linux` as it will be an interface to the Linux kernel.
+To get a deeper understanding how the Rust ecosystem works we won't use cargo at this point but write out all the commands which 
 Cargo uses to build the libraries and binaries. Let's create a simple Rust binary with:
 ```
 > echo 'fn main() {}' > bin.rs
@@ -22,11 +22,11 @@ Cargo uses to build the libraries and binaries. Let's create a simple Rust binar
 > echo $?
 0
 ```
-The only thing our program currently does is giving back a number as return code but it's gonna be more than enough for first.
+The only thing our program currently does is giving back a number as return code but it's gonna be more than enough for now.
 
 ## Disable the Rust standard library
 ### #![no_std]
-To disable the Rust standard library we have to add the `#![no_std]` at the top of the source file:
+To disable the Rust standard library we have to add `#![no_std]` at the top of the source file:
 ```rust
 #![no_std]
 fn main() {}
@@ -39,7 +39,7 @@ error: unwinding panics are not supported without std
 ```
 
 ### Panic handler
-It seems like the std lib provides a panic-handler which is needed to be able to compile the code. 
+It seems like the std lib provides a panic-handler which is needed to compile the code. 
 So let's implement it by adding the following lines at the end of the main.rs file:
 ```rust
 #[panic_handler]
@@ -82,9 +82,9 @@ error: linking with `cc` failed: exit status: 1
           (.text+0x21): undefined reference to `__libc_start_main'
           collect2: error: ld returned 1 exit status
 ```
-As you have probably expected it doesn't compile. (From now on I'm going to cleanup the long error messages a bit 
-to only show the relevant informations to us) But more interestingly it doens't complain about the missing `main` function
-but the missing `__libc_start_main` function. Which is a bit weird because we're compiling Rust and not C code.
+As you have probably expected it doesn't compile. (From now on I'm going to cleanup the long error messages
+to only show the relevant informations to us) But more interestingly it doens't complain about the missing `main` function.
+It complains about the missing `__libc_start_main` function. Which is a bit weird because we're compiling Rust and not C code.
 
 
 ## Disable standard startup logic
@@ -126,8 +126,8 @@ Segmentation fault (core dumped)
 ```
 
 ## Implement startup logic
-It look like we made a step further. We can compile our code now just we're unable to run it. To find a reason of a segfault
-it's typically good idea to run the binary in gdb.
+It look like we made a step further. We can compile our code now but we're unable to run it. To find the reason of a segfault
+it's typically a good idea to run the binary in gdb.
 ```
 > gdb ./bin
 (gdb) set backtrace past-main on
@@ -143,8 +143,8 @@ Program received signal SIGSEGV, Segmentation fault.
 #2  0x00007fffffffebda in ?? ()
 #3  0x0000000000000000 in ?? ()
 ```
-That's not to much information a bunch of zeros in the backtrace and some questionmarks... But where is the `_start` function
-which we have defined? Let's try another tool to print the symboles of an executable:
+That's not to much information, right? A bunch of zeros in the backtrace and some questionmarks... But where is the `_start` function
+which we have defined? Let's try another tool to print the symboles of the executable:
 ```
 > nm ./bin
 0000000000401000 R __bss_start
@@ -157,12 +157,11 @@ and the name of the symbole (column 3). The `R` type means that the symbole is i
 and `U` type means that the symbole is undefined. So the conclusion is that the `_start` function which we just added to 
 the source is **undefined**. Which also explains why it doesn't show any memory address for this function.
 
-Rust has a different philosophy about public and private function compared with other popular languages like C or Java.
+Rust has a different philosophy about public and private function compared to other popular languages like C or Java.
 In C or Java is everything public until you mark it specifically private. For example in C one can mark a function private
-for a compilation unit with the `static` keyword. As opposed to this in Rust is everythin private until you make it specificly
+for a compilation unit with the `static` keyword. As opposed to this in Rust is everything private until you mark it specifically
 public. So how can we make our `_start` function public? Let's decorate it with the 
-[`#![no_mangle]`](https://doc.rust-lang.org/reference/abi.html#the-no_mangle-attribute) attribute. This attribute has to effects
-on the decorated function: 
+[`#![no_mangle]`](https://doc.rust-lang.org/reference/abi.html#the-no_mangle-attribute) attribute. This attribute has two effects:
 - Disables name mangling (more about that later)
 - Makes the function public for the compilation unit
 ```rust
@@ -203,8 +202,8 @@ what we have missed:
 > The address is usually placed on the stack by a CALL instruction, and the return 
 > is made to the instruction that follows the CALL instruction
 
-If the `_start` function is the first code which gets executed then there is not return value on the stack which can be
-used to jump to after finishing the `_start` function. But what should we do if we can not return from a function?
+If the `_start` function is the first code which gets executed then there is no return value to jump to.
+But what should we do if we can not return from a function?
 
 The answer is: tell the kernel, that we're done and the process should be destroyed without executing further instructions.
 We can do that by applying some assembly code in place of the `ret` instruction. Let's rewrite the `_start` function like this:
@@ -231,13 +230,13 @@ The compiler will generate the following assembly code for us:
   40100f:       0f 05                   syscall
   401011:       0f 0b                   ud2
 ```
-It has replaced the return instruction with the small code we provided and something else. So what does these lines do?
+The return instruction was replaced with the small code we provided and something weird. So what does these lines do?
 The `mov rax,0x3c` moves the integer value 60 into the `rax` register of the CPU. This value is used by the kernel to identify the
 request as `exit`. The second instruction moves the integer value 0 into the `rdi` register. This will be the return code
 of our program. The `syscall` transfers the execution of the process to the kernel but since the process will be destroyed
 the last instruction `ud2` will never be executed by the CPU. And it's perfect like that because the `ud2` is not a valid
-x86_86 instruction. This way the compiler makes sure that if the `syscall` returns the process will fail with immediatelly
-and Illegal Instruction error. This is the result of the [`options(noreturn)`](https://doc.rust-lang.org/reference/inline-assembly.html#options).
+x86_64 instruction. This way the compiler makes sure that if the `syscall` returns the process will fail immediatelly
+with an Illegal Instruction error. This is the result of the [`options(noreturn)`](https://doc.rust-lang.org/reference/inline-assembly.html#options).
 I encourage you to prove it yourself by putting the `ud2` instruction before the `syscall` 
 instruction and let the process crash. It looks like this:
 ```
@@ -250,7 +249,7 @@ But if you remove the `ud2` instruction again, the execution of the binary gives
 > echo $?
 0
 ```
-And if you modify the value of the `rdi` register by replacing the `0x0` with `13` for example it gives back 13 as return code:
+And if you modify the value of the `rdi` register, let's say, to `13` it gives back 13 as return code:
 ```
 > ./bin
 > echo $?
@@ -262,12 +261,11 @@ Try to figure out why is the code generated like that. (We're getting back to th
 
 
 ## Implement standard library
-Until now we've implemented everyting in a single binary but what we're aiming for with the project is creating a Linux
-specific standard library. So let's move most of the code into a file called linux.rs and add the call to the `main` function 
+Until now we've implemented everything in a single binary but what we're aiming for a Linux specific standard library. 
+So let's move most of the code into a file called linux.rs and add the call to the `main` function 
 into the `_start` function. The library file look this now:
 ```rust
 #![no_std]
-#![no_main]
 
 #[no_mangle]
 fn _start() -> ! {
