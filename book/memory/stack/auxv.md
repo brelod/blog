@@ -57,11 +57,32 @@ A bit lower level way to the the same is:
 0000500 0000000000000000 0000000000000000
 ```
 
+The parsing works similar to the ARGV / ENVP in env.rs:
 ```rust,no_run,no_playground
 {{#include ../../../code/env.rs:auxv}}
 ```
 
+And the startup logic looks like this now:
 ```rust,no_run,no_playground
-{{#include ../../../code/lib.rs:__rust_main}}
+pub(crate) static ARGV: AtomicPtr<*const i8> = AtomicPtr::new(core::ptr::null_mut());
+pub(crate) static ENVP: AtomicPtr<*const i8> = AtomicPtr::new(core::ptr::null_mut());
+pub(crate) static AUXV: AtomicPtr<auxv_t> = AtomicPtr::new(core::ptr::null_mut());
+
+#[no_mangle]
+unsafe fn __rust_main(rsp: *const u8) -> u8 {
+    let argc = *(rsp as *const isize);
+    let argv = rsp.offset(8) as *mut *const i8;
+    let envp = rsp.offset(8 + 8 + argc * 8) as *mut *const i8;
+
+    let mut p = envp;
+    while !(*p).is_null() { 
+        p = p.offset(1);
+    }
+    let auxv = p.offset(1) as *mut auxv_t;
+
+    ARGV.store(argv, Ordering::Relaxed);
+    ENVP.store(envp, Ordering::Relaxed);
+    AUXV.store(auxv, Ordering::Relaxed);
+}
 ```
 

@@ -1,7 +1,7 @@
-# mmap, munmap
+# mmap
 
 ## Memory protection
-Although `brk` is a nice little tool to allocate memory there quite a lot of other things we can do with memory.
+Although `brk` is a nice little tool for allocation, there quite a lot of other things we can do with memory.
 To write self modifying code we can use mmap to allocate a memory which has all the read-write-exec flags enabled
 
 Let's create an executable which can read byte stream from standard out and it tries to execute it.
@@ -105,7 +105,7 @@ We can dump our exploit function as a binary blob so we can use it against our r
 
 ## File mappings
 As we've seen in the `brk` section there are always some files mapped into the virtual address space of a process.
-At least there is the binary which is being executed. In many times there are mapped here too. (Check out the mappings
+At least there is the binary which is being executed. In many times there are mappings here too. (Check out the mappings
 of the cat command with `cat /proc/self/maps` or of your shell with `cat /proc/$$/maps`)
 
 We can also map a regular file to the address space and use it like a permanent buffer for our program.

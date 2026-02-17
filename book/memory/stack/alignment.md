@@ -48,18 +48,18 @@ Let's lookup what these instructions are doing:
 - [`movups`](https://www.felixcloutier.com/x86/movups): Move Unaligned Packed Single Precision Floating-Point Values
 
 The key difference between these two is alignment of the memory address. While `movups` doesn't expect any alignment
-of the memory address the `movaps` expects that it is 16/32/64 byte aligned:
+of the memory address but the `movaps` expects that it is 16/32/64 byte aligned:
 > When the source or destination operand is a memory operand, the operand must be aligned on a 16-byte (128-bit version), 
 > 32-byte (VEX.256 encoded version) or 64-byte (EVEX.512 encoded version) boundary or a general-protection exception 
 > (#GP) will be generated.
 
-The instruction which crashes process uses `[rsp+0x60]` as memory address. `0x60` is 16 byte aligned but what is the value 
+The instruction which crashes uses `[rsp+0x60]` as memory address. `0x60` is 16 byte aligned but what is the value 
 of the `rsp` register? Let's go back to gdb and print the current value of the register with
 ```
 (gdb) info registers rsp
 rsp            0x7fffffffe828      0x7fffffffe828
 ```
-It seems like we have found the reason: The value of `rsp` is not 16 byte aligned so `[rsp+0x60]` wont be 16 byte aligned
+It seems like we have found the reason: The value of `rsp` is not 16 byte aligned so `[rsp+0x60]` won't be 16 byte aligned
 either which causes the processor to throw a general-protection exception.
 
 That's all nice but if the aligment of the memory address is so important then why does the compiler not check if `rsp`
@@ -99,11 +99,11 @@ The problem seems to be comming after that: the first instruction of the `rust_b
 the stack pointer which becomes unaligned this way. But why does it do that if it knows that `movaps` needs 16 byte alignment?
 
 The reason for that is that the `rsp` has to be 16 byte aligned **before** the [`call`](https://www.felixcloutier.com/x86/call) 
-instruction is executed. Since call instruction pushes the return current value of the instruction pointer (`rip`) onto the stack
-which is 8 byte long the compiler needs to compensate this as the first step of every function call. So the `sub rsp,0x88` should
-actually make the `rsp` 16 byte aligned again which means that it wasn't aligned at all wenn the `rust_begin_unwind` function
-was started. To find out when did it get misaligned we need to go up on the stack frames and check the `rsp` registers. Let's
-see how does the stackframes look like:
+instruction is executed. Since call instruction pushes the current value of the instruction pointer (`rip`) onto the stack,
+which is 8 byte long, the compiler needs to compensate this as the first step of every function call. So the `sub rsp,0x88` should
+actually make the `rsp` 16 byte aligned again, which means that it wasn't aligned at all wenn the `rust_begin_unwind` function
+was started. To find out when did it get misaligned we need to go up on the stack frames and check the `rsp` register. Let's
+see how do the stackframes look like:
 ```
 (gdb) backtrace
 #0  0x0000000000402520 in rust_begin_unwind ()
@@ -131,9 +131,9 @@ rsp            0x7fffffffe8f8      0x7fffffffe8f8
 (gdb) info registers rsp
 rsp            0x7fffffffe948      0x7fffffffe948
 ```
-If if go up on the stackframes we can checkout the value of registers right before `call` instruction. The bad news is that
+If we go up on the stackframes we can checkout the value of registers right before `call` instruction. The bad news is that
 the `rsp` seems to be misaligned already in the main function. This means that the whole code is corrupted. Since `main`
-function is called from our `_start` function let's invesigate that one:
+function is called from our `_start` function, let's invesigate that one:
 ```
 > gdb ./target/bin
 (gdb) set disassembly-flavor intel
@@ -184,8 +184,8 @@ and **without** this option we get the **crashing** assembly code:
 ```
 
 So what's here happening, isn't it exactly the opposite of what the documentation says? And the answer is no.
-The compiler guaranties the stack alignment the right way in case of a function call. But no knowledge about that the
-`_start` code section never gets called. It thinks that it's a function just like any other. We can prove this
+The compiler guaranties the stack alignment the right way in case of a function call. But it has no knowledge about the
+`_start` code section being never called. It thinks that it's a function just like any other. We can prove this
 by moving the `call main` outside of the assembly block. It will generate the `push rax` even if the assembly block
 has the `nostack` option enabled.
 ```rust
@@ -224,7 +224,7 @@ of the asm block:
 fn _start() -> ! {
     unsafe {
         core::arch::asm!(
-            "add rsp,-0x10",
+            "and rsp,-0x10",
             "call main",
             "mov rdi,rax",
             "mov rax,0x3c",
@@ -250,7 +250,7 @@ fn _start() -> ! {
     unsafe {
         core::arch::asm!(
             "xor rbp,rbp",
-            "add rsp,-0x10",
+            "and rsp,-0x10",
             "call main",
             "mov rdi,rax",
             "mov rax,0x3c",

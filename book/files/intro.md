@@ -10,9 +10,9 @@
 
 
 ## Open and close
-First of all we need to implement two syscall the `open` and the `close` to be able to work with files. If you lookup the
+First of all we need to implement two syscalls the `open` and the `close` to be able to work with files. If you lookup the
 manual page of [`open`](https://man7.org/linux/man-pages/man2/open.2.html) and [`close`](https://man7.org/linux/man-pages/man2/close.2.html)
-it says that the function signature look like:
+it says that the function signatures look like:
 ```c
 int open(const char *path, int flags);
 int close(int fd);
@@ -63,7 +63,7 @@ The error message is quite straighforward: The name of the file is too long. Heh
 likely messed something up. So how does the kernel determine the length of our string? It uses the `strlen` function which
 expects a string to be null terminated. As opposed to this the Rust [`str`](https://doc.rust-lang.org/core/primitive.str.html)
 are not null terminated but it works as a byte [`slice`](https://doc.rust-lang.org/core/primitive.slice.html). As a result
-the kernel does out of bound access on our str, so we just violated the rules of Rust and cause undefined behaviour and made
+the kernel does out of bound access on our str, so we just violated the rules of Rust, caused undefined behaviour and made
 the whole library unsound. Nice...
 We can prove it by adding a null byte into our str and letting the code run:
 ```rust
@@ -77,9 +77,9 @@ fn main() -> u8 {
 ```
 > ./cargo.sh run
 ```
-Now seems to be all fine. But as the unsafe rules says: an unsafe block is only safe if it can not be called from safe code
+Now seems to be all fine. But as the unsafe rules says: an unsafe block is only sound if it can not be called from safe code
 in a way that it causes undefined behaviour. This means that we can not expect the user to put a null at the end of a str
-every time a file needs to be opened. We have convert the rust `str` into a null terminated string. And there is a nice struct
+every time a file needs to be opened. We have to convert the rust `str` into a null terminated string. And there is a nice struct
 for it: [`CString`](https://doc.rust-lang.org/alloc/ffi/struct.CString.html). The only problem is that it is defined in the
 `alloc` crate which we don't want to depend on. Let's avoid implementing our own allocation primitives for now and simply
 use a stack array to build our null terminated string. So let's rewrite our `open` function like this:
@@ -106,8 +106,8 @@ pub fn open(path: &str, flags: u64, mode: u64) -> Result<u32> {
     Ok(u32::try_from(rc).unwrap())
 }
 ```
-There are a couple of limits defined in the linux kernel. For example [here](https://github.com/torvalds/linux/blob/v6.9/include/uapi/linux/limits.h)
-To conform these limits, we include a module to the `linux.rs` with `pub mod limits;` and also create a file 
+There are a couple of limits defined in the linux kernel. For example [here](https://github.com/torvalds/linux/blob/v6.9/include/uapi/linux/limits.h).
+To conform to these limits, we include a module to the `linux.rs` with `pub mod limits;` and also create a file 
 called `limits.rs` with the content of 
 ```rust
 pub const PATH_MAX: usize = 4096;
@@ -181,7 +181,7 @@ The C wrapper of the `stat` and `fstat` syscalls look like this:
 int stat(const char *pathname, struct stat *statbuf);
 int fstat(int fd, struct stat *statbuf);
 ```
-In it's quite common to create a struct on the stack and pass it into a function as a pointer. The function initializes
+In C it's quite common to create a struct on the stack and pass it into a function as a pointer. The function initializes
 the struct and after that we can use it. It makes a lot of sense because so we can use the return value as an error type.
 Zero means typically that the function succeeded while something else means typically an error. As opposed to this we
 have `Result` types in Rust. So would be better to create the `stat` struct on the stack of the syscall wrapper and
@@ -298,9 +298,9 @@ If we build the code and dump the assembly it's easy to see the difference betwe
 ```
 
 The second version of fstat is more thant twice as long as the first. But is it enough to throw it away? To be able to answer
-the question we have to go a bit deeper in the code of `fstat2` and analyse what's actually happening here
+the question we have to go a bit deeper in the code of `fstat2` and analyse what's actually happening here.
 
-After aligning the satck (`push rbx`) we reserve `0x90` byte space on the stack for the `stat64` struct. This space has to be
+After aligning the satck (`push rbx`) we reserve `0x98` byte space on the stack for the `stat64` struct. This space has to be
 zerod out and to make it fast the compiler zeros out the `xmm0` SIMD register and uses it to copy zeros on the stack.
 ```
   401fa0:              55                       push   rbp
@@ -352,7 +352,7 @@ Do the error handling here
   402012:          |   88 43 01                 mov    BYTE PTR [rbx+0x1],al
   402015:          |   b0 01                    mov    al,0x1
 ```
-Teardown the function and return with `Result<stat64>`. Release the `0x90` bytes and the extra 8 alignment byte from the stack
+Teardown the function and return with `Result<stat64>`. Release the `0x98` bytes and the extra 8 alignment byte from the stack
 and return to the caller function.
 ```
   402017:          \-> 88 03                    mov    BYTE PTR [rbx],al
@@ -417,8 +417,8 @@ pub fn fstat2(fd: u32) -> Result<stat64>;
 6. fstat returns the result
 
 Beside the fact that the fstat1 function is much more lightweight (no extra allocation + memcpy) we can also reuse the
-stat64 struct in case of checking multiple files. So we don't have to reintialize it over and over again, which took at
-least 10 instruction long. As a conclusion let's drop the fstat2 function rename fstat1 to fstat. 
+stat64 struct in case of checking multiple files. So we don't have to reintialize it over and over again, which was at
+least 10 instruction long. As a conclusion let's drop the fstat2 function and rename fstat1 to fstat. 
 Similarly we can also implement `stat` and `lstat` as follows
 ```rust
 const SYS_STAT: isize = 4;
@@ -635,7 +635,7 @@ fn main() -> u8 {
     0
 }
 ```
-Let's start our program like and let it block on the read syscall
+Let's start our program and let it block on the read syscall
 ```
 > ./cargo.sh run
 Cursor position: 512

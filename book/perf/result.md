@@ -31,11 +31,11 @@ fn main() -> u8 {
 }
 
 ```
-Rust does a good job with optimizing out the code which is not necessaryy and this feautre makes it difficult to 
+Rust does a good job with optimizing out the code which is not necessary and this feautre makes it difficult to 
 investigate the code of a function. A simple function with a constant return value wont be put into the binary so we can not
 dump the assembly of it. To trick the compiler into leaving our code in the binary we can use a simple assembly line which
-doesn't do anything but the since the compiler doesn't check the value of it it just thinks that it's important so it
-leaves it there.  After the compilation our code looks like this:
+doesn't do anything. The compiler doesn't check the value of it, it just thinks that it's important so it
+leaves it there. After the compilation our code looks like this:
 ```
 > ./cargo.sh dump ok
 00000000004012f0 <ok>:
@@ -49,7 +49,7 @@ leaves it there.  After the compilation our code looks like this:
   401301:       b0 01                   mov    al,0x1
   401303:       c3                      ret
 ```
-As you can the code of the two functions are quite similar. The `rax` register (or it's parts) will be set and the code
+As you can see the code of the two functions are quite similar. The `rax` register will be set and the code
 returns. In case of `Ok(())` the `rax` is set to zero and by `Err(())` it will be set to one. Since the content of the
 result is always zero sized `()` it doesn't even need a register to be passed back to the caller function.
 
@@ -172,7 +172,7 @@ pub enum Error { A, B }
 ```
 The return values have been changed. Now zero means `Err(Error::A)` and two means `Ok(())`. It seems like the compiler
 realizes that the `Ok(())` value can only have one state so it can be represented just like another variant of the `Error`
-enum. It kind of creates another enum other the hood like
+enum. It kind of creates another enum under the hood like
 ```rust
 enum SpecialError {
     Err_Error_A = 0,
@@ -273,7 +273,7 @@ registers just like we did this above. As opposed to this if the return value ha
 the caller functions needs to reserve space for the return value and the called function will write the value there.
 In this case the pointer to this space is passed as a hidden first argument to the function in the `rdi` register and the
 `rax` register should hold the pointer to this space at the return point. Hence `mov rax,rdi` at the beginning of both functions.
-And after that the provided memory location pointed by `[rdi]` will be filled with tiher `0` and `0x3` for the `Ok(3)` or
+And after that the provided memory location pointed by `[rdi]` will be filled with either `0` and `0x3` for the `Ok(3)` or
 with `0x101` for the `Err(Error::B)`
 
 And this is kind of sad because we're most likely hitting L2 (but at a minimum L1) cache for returning a 
@@ -314,10 +314,8 @@ Just as a function which doesn't do unnecessarry work:
 
 So as long as we don't use an `Ok` or `Err` type bigger than 64 bit we should be good now.
 Even though it's a bit compilicated to use there are some benefits of using `Result`:
-- The value must be checked instead of simply using (like by malloc). It doesn't to access
+- The value must be checked instead of simply using (like by malloc). You can not access
     its content until you proved that it's has an Ok or Err value. This is a huge benefit.
 - The questionmark. You can forward the error by using simply `Err()?`. But how does it work
     under the hood?
 
-
-## The ? operator

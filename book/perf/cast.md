@@ -7,7 +7,7 @@ There are multiple ways to convert types in Rust. We're going to investigate the
 - [TryInto](https://doc.rust-lang.org/core/convert/trait.TryInto.html) and
     [TryFrom](https://doc.rust-lang.org/core/convert/trait.TryFrom.html)
 
-## u64 => u32
+## u32 => u64
 Let's create a small program to check out the differences at the assembly level:
 ```rust
 #![no_std]
@@ -66,7 +66,7 @@ once we compile, we get the following codes
 As you can see rust really does a zero-cost abstraction and generates all of our functions the same way. This is possible
 since a `u32` can always be converted into a `u64`. 
 
-## u32 => u64
+## u64 => u32
 But What happens if we switch the types and try to convert `u64` into `u32`?
 In this case we don't have the `Into` and `From` traits implemented for the conversion so we can only compare the following
 functions:
@@ -113,7 +113,7 @@ so it can be sure that it fits into an `u32` and it optimizes out the size check
   4012b2:       c3                      ret
 ```
 
-Let's make it a bit more comples by reading a random byte from stdin, so the compiler doesn't have a chance to optimize our code:
+Let's make it a bit more complex by reading a random byte from stdin, so the compiler doesn't have a chance to optimize our code:
 ```rust
 #![no_std]
 #![no_main]
@@ -286,7 +286,7 @@ fn main() -> u8 {
     0
 }
 ```
-Interestingly if we try to disasseble the code of these functions there are only three of them can be found:
+Interestingly if we try to disassemble the code of these functions there are only three of them can be found:
 `i32_as_i16`, `u32_as_i64`, `i32_as_i64`. We must to dig a bit deeper to find out why. Let's checkout the symbol table
 of the binary with 
 ```
@@ -330,7 +330,7 @@ is that:
 ```
 I'm now sure why the first two functions weren't merged but maybe because of the different input type (`u32`/`i32`) but the
 third function is obviously different. It creates a signed integer with bigger size. This means that the value has to be
-sign-extended ([`movsxd`](https://www.felixcloutier.com/x86/movsx:movsxd). This means for example if case of `i8 => i16`
+sign-extended ([`movsxd`](https://www.felixcloutier.com/x86/movsx:movsxd)). This means in case of `i8 => i16`
 ```
 -1: 0xff => 0xffff
 +1: 0x01 => 0x0001

@@ -2,7 +2,7 @@
 authors = ["Daniel Bognar"]
 language = "en"
 src = "book"
-title = "Living without standards"
+title = "Life without standards"
 
 #[output.linux]
 #command = "rustdoc ../std/lib.rs -o doc"

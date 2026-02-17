@@ -4,13 +4,13 @@ In these series we're going to implement a basic version of a dynamic linker to 
 Let's make a step back and see what's dynamic linking all about. As always, we're going to use the simplest example programs
 and for that we have to write some assembly. Let's get some definitions done to avoid confusion:
 
-## Object file:
+## Object file
 An object file is a compilation unit in which all the necessary information is collected.
-Once the program files are compiled and organized into object these files can be linked together to form a library 
-or an executable file. This job is done by the program linker.
+Once the program files are compiled and organized into object files, these can be linked together to form a library 
+or an executable. This job is done by the program linker.
 
 Let's create a simplistic object file which only holds a global variable. We could use this variable to specify the exit
-code fo the program so let's call the file `rc.s` and the variable `RC`
+code of the program so let's call the file `rc.s` and the variable `RC`
 ```
 global RC:data
 section .data
@@ -62,13 +62,13 @@ This tells us the followings:
 - It has a global symbol called `RC` (last line) and it's located in the fist section (Ndx=1) which is the `.data` section
 
 As you can see the value of all the symbols are zero. The value should be a memory addres which the symbol points to, so how
-can it be zero? It will be updated by the linker once this object file is merged into an executable or a shared library.
+can it be zero? It will be updated by the linker once this object file is merged into an executable or a library.
 
-## Static linking:
+## Static linking
 The simplest way to create an elf binary is merging all of its parts into a single file. This allows it to be fully independent
 from any other userspace code. As a result you can put it into a docker container / chroot environment and it will just run.
 
-Let's reimplement the `/bin/false` command in such a way: The only thin the `false` command does is exiting with 1 as return code.
+Let's implement the `/bin/false` command in such a way: The only thing the `false` command does is exiting with 1 as return code.
 To make it a bit more interesting let's use the `rc.o` file as a static library which we can include into our binary and use the
 value of `RC` defined there as the exit code of our binary. The source of our `false.s` looks lie this:
 ```
@@ -83,7 +83,7 @@ _start:
 ```
 With `extern RC:data` we tell the assembler that the `RC` with type `data` exists somewhere in another object file which we will
 link against. With `mov rdi,[RC]` we say the compiler to go to the address marked by `RC` and read the value of the memory there
-and move it intot the rdi register. This register is used as the return value of the exit system call. 
+and move it into the rdi register. This register is used as the return value of the exit system call. 
 We can compile, link and run like this:
 ```
 > nasm -f elf64 ./false.s
@@ -148,7 +148,7 @@ Symbol table '.symtab' contains 8 entries:
      7: 0000000000402000     0 OBJECT  GLOBAL DEFAULT    2 RC
 ```
 As we can see the Type of the file is `EXC (Executable file)` now and as a result there is a new part in this dump compared
-to the output of `rc.o`: Program Headers. The three lines under the Program Headers describes how this executable needs to 
+to the output of `rc.o`: Program Headers. The three lines under the Program Headers describes how this executable needs to be
 loaded into the memory when it gets run. The first line has `R` in the `Flg` column meaning that it can only be read. The 
 second line has `RE` meaning it can be read and executed. This hold the `.text` section as we defined in the assembly code 
 with `section .text`. The third line shows the `.data` section which can be read and written (`Flg` = `RW`)
@@ -168,7 +168,7 @@ Since we have an executable part in our file we can dump its content with objdum
   40100d:       0f 05                   syscall
 ```
 As you can see the `mov rdi,[RC]` was replaced with `mov rdi,QWORD PTR ds:0x402000`. As you can see the address in this
-intruction is the same as the Value of the `RC` symbole. So it point to the same byte of the `.data` section and it will
+intruction is the same as the Value of the `RC` symbole. So it points to the same byte of the `.data` section and it will
 use the value located there which is in our case 1.
 
 Let's checkout the memory mappings of our executable in gdb
@@ -212,7 +212,7 @@ some command line flags. All of them can be found with `readelf --help`.
 Type: DYN (Shared object file)
 ```
 As we can see in the elf header the type of this file is `DYN (Shared object file)`. 
-In the Program Headers wen can see that there is no more execution part (`Flg=RE`) but there are some other types like
+In the Program Headers we can see that there is no more execution part (`Flg=RE`) but there are some other types like
 `DYNAMIC` and `GNU_RELRO`. TODO: Describe what are these for.
 ```
 > readelf -Wl ./rc.so
@@ -252,7 +252,7 @@ As opposed to this the dynamically loaded libraries must expect to be loaded int
 Otherwise we should have a global register about the memory addresses where the different libraries are going to be loaded.
 (A bit like the public ip addresses get assigned to companies).
 
-As a result all the symbol addreses of a shared library needsto be updated once it got loaded into the memory. That's the job
+As a result all the symbol addreses of a shared library needs to be updated once it got loaded into the memory. That's the job
 of the dynamic loader which we are going to implement in these series.
 
 But first let's create our executable by dynamically linking against our `rc.so` library. This time we need to modify our
@@ -269,7 +269,7 @@ _start:
     mov rax,0x3c
     syscall
 ```
-Let's recompile and run our command. To do that we need to find the dynamic loader of the system which can be done like this
+Let's recompile and run our command. To find the dynamic loader of the system:
 ```
 > ls /lib64/ld*
 /lib64/ld-linux-x86-64.so.2
@@ -307,8 +307,8 @@ There are multiple things to see: Even though we break at the `_start` function 
 This is the one of the dynamic linker (ld.so). (Note that I rewrote name of the `ld.so` because it doesn't matter but
 makes the look of the article ugly)
 The other thing is to see is that compared to our static binary there is the dynamic loader also mapped into our memory
-address space. And if you hit continue in the debugger, let it stop at our `_start` function and check the mappings again
-you'll see that the `rc.so` is mapped to. The loading of such shared libraries at the startup of the program is one of the
+address space. And if you hit continue in the debugger, let it stop at our `_start` function and check the mappings again.
+You'll see that the `rc.so` is mapped to. The loading of such shared libraries at the startup of the program is one of the
 jobs of the dynamic loader.
 ```
 (gdb) continue
@@ -335,7 +335,7 @@ jobs of the dynamic loader.
 
 ## Position independent executable (PIE)
 As we discussed above all the shared libraries needs to be position independent, since they can be loaded anywhere in the memory.
-To achive that we have to write pisition independent code (PIC) or instruct the compiler to write pic assembly for us (`gcc -fpic`).
+To achive that we have to write position independent code (PIC) or instruct the compiler to write pic assembly for us (`gcc -fpic`).
 But can we do the same for executables? Yes we can. In princip it is the same process. We need to write code that must expect
 to be loaded anywhere in the memory and link it with the `-pie` flag. Since the source code of our executable is basicly empty
 we can already link it as pie. A position independent executable can statically as well as dynamically linked. There is a 
@@ -434,8 +434,8 @@ Relocation section '.rela.dyn' at offset 0x298 contains 1 entry:
     Offset             Info             Type               Symbol's Value  Symbol's Name + Addend
 0000000000002ff8  0000000100000006 R_X86_64_GLOB_DAT      0000000000000000 RC + 0
 ```
-As we're referencing a variable which is located in a shared library we can not the address of it before the library
-will be mapped. So the linker does an indiretion for us. Instread of referencing the variable directly we are referencing
+As we're referencing a variable which is located in a shared library we can not know the address of it before the library
+was mapped. So the linker does an indirection for us. Instead of referencing the variable directly we are referencing
 a memory address which is tied to our binary and which serves as a pointer to the real address of the variable. Hence the
 assembly code `mov rax,[rel RC wrt ..got]` which could be interpreted like this:
 1. Calculate a relative location of `RC` With Reference To `GOT`
@@ -478,9 +478,9 @@ Let's prove this with gdb
       0x7ffffffde000     0x7ffffffff000    0x21000        0x0  rw-p   [stack]
   0xffffffffff600000 0xffffffffff601000     0x1000        0x0  --xp   [vsyscall]
 ```
-As you can see our prgram was mapped at the address of `0x555555554000`. If we add the offset of the relocation to this address
+As you can see our program was mapped at the address of `0x555555554000`. If we add the offset of the relocation to this address
 we can get the value of this memory region. At this point it is zero because the dynamic linker has just started and haven't 
-done any fixings. Once we let the program continue and stop on out `_start` function the dynamic linker has already finished
+done any fixings. Once we let the program continue and stop on our `_start` function the dynamic linker has already finished
 it's first job and the value pointed by the relocation has been changed.
 ```
 (gdb) x/1gx 0x555555554000 + 0x002ff8
@@ -499,11 +499,11 @@ At this point our program is ready to use this indirection to access the memory 
 
 ## Conclusion
 To summarize the above we could say the followings:
-- **PIC**: Position independent code is a type of assembly code which only uses relative addressing. This is must for
+- **PIC**: Position independent code is a type of assembly code which only uses relative addressing. This is a must for
     dynamicly linked libaries and an option for the executables.
-- **PIE**: Poisition independent executable is an executable which written with PIC code only and so it can be loaded anywhere
+- **PIE**: Poisition independent executable is an executable which was written with PIC code only and so it can be loaded anywhere
     in the memory address sapce
-- **Object file**: is a compilation unit which will be relocated during the linkage. Multiple object files can be merges into
+- **Object file**: is a compilation unit which will be relocated during the linkage. Multiple object files can be merged into
     an archive (static library) a shared object (dynamic library) or into an executable.
 - **Shared object file**: is a dynamically linked library which can be loaded anywhere in the memory because it's written in PIC
 - **Static linking**: is way to combine multiple object files into a single executable

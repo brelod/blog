@@ -33,9 +33,9 @@ It says that the stack of the process will be initialized as follows:
 - Environment pointer vector entries (`char **envp`)
 - End of argument pointer vector (null pointer)
 - Argument pointer vector (`char **argv`)
-- Argument pointer vector lengs (`int argc`)
+- Argument pointer vector length (`int argc`)
 
-The argument and environment ponter vectors are just an array of pointers pointing to the Info block of the stack.
+The argument and environment pointer vectors are just an array of pointers pointing to the Info block of the stack.
 To check the value of it we can use gdb like this:
 ```
 > gdb --args ./target/bin --arg1 --arg2
@@ -52,13 +52,13 @@ To check the value of it we can use gdb like this:
 0x7fffffffec74: "EDITOR=vim"
 ```
 The `x` let's you examine a memory location of the program and the `/8s` specifies that 8 strings should be displayed.
-The `$rsp + 8` is the location of the `char **argv` and cast it derefence it you get the wanted memory location.
+The `$rsp + 8` is the location of the `char **argv` and if you cast and derefence it, you get the wanted memory location.
 After the list of command line arguments we can see a list of environment variables. Feel free to play around the `x` 
 command of gdb if you're unfamiliar to it. You can get the help of it like `help x`.
 
 # Command line arguments
-Let's try to implement a C like command line argument handling. As we have learn in chapter 2 the C ABI uses the `rdi`,
-`rsi`, `rdx`, `rcx`, `r8` and `r9` registers to pass the arguments to a function so to pass `argc` and `argv` to `main`
+Let's try to implement a C like command line argument handling. The C ABI uses the `rdi`,
+`rsi`, `rdx`, `rcx`, `r8` and `r9` registers to pass the arguments to a function. So to pass `argc` and `argv` to `main`
 we just need to fill these registers with the values we can found on the stack. Let's rewrite our `_start` function like this:
 ```rust
 #[no_mangle]
@@ -80,8 +80,8 @@ fn _start() -> ! {
 If you look at the assembly code there is important difference between `argc` (`rdi`) and `argv` (`rsi`): The `argc` is
 passed by value while the `argv` is passed by a reference. As such in case of `argc` we load the value pointed by `rsp`
 into the `rdi` in the instruction `mov rdi,[rsp]`. As opposed to this the [`lea`](https://www.felixcloutier.com/x86/lea)
-instruction instead of loading the value it just calculates the memory address at `[rsp+8]` and puts this address to `rsi`.
-As a result `argc` can be interpreted az an integer value while `argv` can be interpreted as pointer to to an array of strings.
+instruction instead of loading the value it just calculates the memory address at `[rsp+8]` and puts this address into `rsi`.
+As a result `argc` can be interpreted as an integer value while `argv` can be interpreted as pointer to an array of strings.
 
 We can now rewrite the `main` function like this:
 ```rust
@@ -129,11 +129,11 @@ It works but this way the `main` function needs to implement an unsafe block to 
 The Rust standard library provides an [`args()`](https://doc.rust-lang.org/std/env/fn.args.html) which returns an
 [`Args`](https://doc.rust-lang.org/std/env/struct.Args.html) struct which implements the 
 [`Iterator`](https://doc.rust-lang.org/std/iter/trait.Iterator.html) trait so one can iterate over the arguments without
-the need of unsafe blocks. Let's take as an example and implement our `env` module. Let's create a new file called `env.rs`
+the need of unsafe blocks. Let's take this as an example and implement our `env` module. Let's create a new file called `env.rs`
 and include it into the `linux.rs` with `pub mod env;`.
 
 To be able to do some initialization we won't call the `main` function directly from `_start` but we will implement a `__rust_main`
-function (just like we have seen `__libc_main` in the first chapter) and do the process initialization there. Let's do that
+function and do the process initialization there. Let's do that
 by modifying the `linux.rs` file like this:
 ```rust
 extern "C" { fn main() -> u8; }

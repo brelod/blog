@@ -9,7 +9,7 @@ EDITOR=vim
 ....
 _=/usr/bin/cat
 ```
-We already have almost everyting to get access to the environment variables of our process.
+We already have almost everything to get access to the environment variables of our process.
 Let's update the startup logic like this:
 ```rust
 pub(crate) static ENVP: AtomicPtr<*const i8> = AtomicPtr::new(core::ptr::null_mut());
@@ -87,7 +87,7 @@ fn main() -> u8 {
     0
 }
 ```
-But this time we get an symbole error on compilation:
+But this time we get a symbole error on compilation:
 ```
 > ./cargo.sh build
   = note: /usr/bin/ld: /home/taabodal/work/blog/src/chapter-03/target/liblinux.rlib(liblinux.linux.77104c24dad4cdd3-cgu.0.rcgu.o): in function `<[A] as core::slice::cmp::SlicePartialEq<B>>::equal':

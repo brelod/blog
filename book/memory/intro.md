@@ -6,7 +6,7 @@ Let's create a small binary without much bloat and checkout its memory footprint
 section .text
 global _start
 _start:
-    mov rax,0x22
+    mov rax,34
     syscall
 ```
 All it does is providing an entry point to the process and pauses the execution by calling the `pause` system call.
@@ -114,7 +114,7 @@ Section Headers:
 ```
 
 ## The .bss section
-To reserve some extra space we can use during the execution of the process we can use the `.bss` section
+To reserve some extra space which could be used during the execution of the process we can use the `.bss` section
 ```asm
 section .bss
     resq 1024
@@ -152,8 +152,8 @@ Section Headers:
 
 ## The heap
 Let's reserve another type of memory. For the heap allocation we need to ask the kernel to move the break point of the
-process a bit higher. There is a system call for that called `brk()`. If it is called with 0 as argument it returns the
-current break point of the process and it if it's called with a valid address it will be set as the new breakpoint.
+process a bit higher. There is a system call for that called `brk()`. If it's called with 0 as argument it returns the
+current break point of the process and if it's called with a valid address it will be set as the new breakpoint.
 The assembly code looks like this:
 ```asm
 section .text
@@ -174,7 +174,7 @@ _start:
     mov rax,34
     syscall
 ```
-If we execute see a new line again called `[heap]`. Similarly to the `.data` and `.bss` sections it is also mapped into
+If we execute, we'll see a new line again called `[heap]`. Similarly to the `.data` and `.bss` sections it is also mapped into
 the low address region of the virtual address space but differently from them the size of it can be changed. It grows towards
 the high memory address region.
 ```
@@ -202,7 +202,7 @@ Section Headers:
 We can also change the size of the stack but I don't know how....
 
 ## The vdso, vvar and vsyscall
-The `v` in the name of these sections means "virtual". The vdso section is a dynamic library mapped by the kernel
+The `v` in the name of these sections means "virtual". The vdso section is a dynamicly linked library mapped by the kernel
 into the address space of the process and it allows to call some system calls with faster execution time. Since the
 call of these functions doesn't require a context switch like a normal system call it can provide a significante performance
 improvement to our program. Let's dump the content of it to check the available symboles. We need our pause program again:
